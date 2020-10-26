@@ -1,4 +1,4 @@
-use cosmwasm_std::{Coin, HumanAddr};
+use cosmwasm_std::{Coin, HumanAddr, Decimal};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -30,9 +30,24 @@ pub enum HandleMsg {
 pub enum QueryMsg {
     /// Returns a human-readable representation of the arbiter.
     Arbiter {},
+    Validator {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ArbiterResponse {
     pub arbiter: HumanAddr,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ValidatorsResponse {
+    pub validators: Vec<Validator>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Validator {
+    pub address: HumanAddr,
+    pub commission: Decimal,
+    pub max_commission: Decimal,
+    /// TODO: what units are these (in terms of time)?
+    pub max_change_rate: Decimal,
 }

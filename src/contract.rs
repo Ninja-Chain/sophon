@@ -1,9 +1,9 @@
 use cosmwasm_std::{
   log, to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
-  HandleResponse, HandleResult, InitResponse, InitResult, Querier, StdError, StdResult, Storage,
+  HandleResponse, HandleResult, InitResponse, InitResult, Querier, StdError, StdResult, Storage, StakingQuery, QueryRequest
 };
 
-use crate::msg::{ArbiterResponse, HandleMsg, InitMsg, QueryMsg};
+use crate::msg::{ArbiterResponse, ValidatorsResponse, HandleMsg, InitMsg, QueryMsg};
 use crate::state::{config, config_read, State};
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
@@ -121,6 +121,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Binary> {
   match msg {
       QueryMsg::Arbiter {} => to_binary(&query_arbiter(deps)?),
+      QueryMsg::Validator {} => to_binary(&query_validators(deps)?),
   }
 }
 
@@ -130,4 +131,11 @@ fn query_arbiter<S: Storage, A: Api, Q: Querier>(
   let state = config_read(&deps.storage).load()?;
   let addr = deps.api.human_address(&state.arbiter)?;
   Ok(ArbiterResponse { arbiter: addr })
+}
+
+fn query_validators<S: Storage, A: Api, Q: Querier>(
+  deps: &Extern<S, A, Q>,
+) -> HandleResult {
+  let res = deps.querier.query(&QueryRequest::Staking(StakingQuery::Validators {}))?;
+  Ok(ValidatorsResponse { validators: res })
 }
