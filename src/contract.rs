@@ -135,7 +135,7 @@ fn query_arbiter<S: Storage, A: Api, Q: Querier>(
 
 fn query_validators<S: Storage, A: Api, Q: Querier>(
   deps: &Extern<S, A, Q>,
-) -> HandleResult {
+) -> StdResult<ValidatorsResponse> {
   let res = deps.querier.query(&QueryRequest::Staking(StakingQuery::Validators {}))?;
   Ok(ValidatorsResponse { validators: res })
 }
