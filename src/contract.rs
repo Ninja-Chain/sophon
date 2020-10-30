@@ -407,6 +407,42 @@ fn select_validator<S: Storage, A: Api, Q: Querier>(
     Ok(validator.clone())
 }
 
+fn unbond<S: Storage, A: Api, Q: Querier> (
+    deps: &mut Extern<S, A, Q>,
+    delegator: HumanAddr
+) -> StdResult<Handleresponse> {
+    // アドレスに対応するDelegateInfoのamountをクエリする
+
+    // アドレスに対応するDelegateInfoのunbond_flagをfalseに、amountを0に更新する
+
+    // 引数のアドレスに対して、amountの量のstakeを送金する
+    send_tokens(
+        env.contract.address,
+        delegator,
+        amount,
+        "approve",
+    )
+}
+
+fn send_tokens(
+    from_address: HumanAddr,
+    to_address: HumanAddr,
+    amount: Vec<Coin>,
+    action: &str,
+) -> Result<HandleResponse> {
+    let attributes = vec![attr("action", action), attr("to", to_address.clone())];
+
+    let r = HandleResponse {
+        messages: vec![CosmosMsg::Bank(BankMsg::Send {
+            from_address,
+            to_address,
+            amount,
+        })],
+        attributes,
+        data: None,
+    };
+    Ok(r)
+}
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     _env: Env,
