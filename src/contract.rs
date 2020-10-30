@@ -10,8 +10,9 @@ use crate::msg::{
     TokenInfoResponse,
 };
 use crate::state::{
-    balances, balances_read, claims, claims_read, invest_info, invest_info_read, token_info,
-    token_info_read, total_supply, total_supply_read, InvestmentInfo, Supply,
+    balances, balances_read, claims, claims_read, delegators, delegators_read, invest_info,
+    invest_info_read, token_info, token_info_read, total_supply, total_supply_read, InvestmentInfo,
+    Supply,
 };
 
 const FALLBACK_RATIO: Decimal = Decimal::one();
@@ -419,6 +420,12 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Claims { address } => to_binary(&query_claims(deps, address)?),
         QueryMsg::Validators {} => to_binary(&query_validators(deps)?),
     }
+}
+
+fn query_all_delegators<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+) -> StdResult<Vec<HumanAddr>> {
+    delegators_read(&deps.storage).load()
 }
 
 pub fn query_token_info<S: Storage, A: Api, Q: Querier>(
@@ -868,5 +875,22 @@ mod tests {
         let validator = select_validator(&mut deps).unwrap();
 
         assert_eq!(validator, custom_sample_validator("my-validator", 1, 10, 3));
+    }
+
+    #[test]
+    fn manage_delegators_list() {
+        let mut deps = mock_dependencies(&[]);
+        #[warn(unused_must_use)]
+        let _ = delegators(&mut deps.storage).save(&vec![HumanAddr::from("init")]);
+        let _ = delegators(&mut deps.storage).update(|mut delegator_list| -> StdResult<_> {
+            delegator_list.append(&mut vec![HumanAddr::from("test")]);
+            Ok(delegator_list)
+        });
+        let all_addr = query_all_delegators(&deps);
+
+        assert_eq!(
+            all_addr.unwrap(),
+            vec![HumanAddr::from("init"), HumanAddr::from("test")]
+        );
     }
 }

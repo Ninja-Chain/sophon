@@ -9,6 +9,7 @@ use cosmwasm_storage::{
 
 use crate::msg::TokenInfoResponse;
 
+pub const KEY_DELEGATORS: &[u8] = b"delegator";
 pub const KEY_INVESTMENT: &[u8] = b"invest";
 pub const KEY_TOKEN_INFO: &[u8] = b"token";
 pub const KEY_TOTAL_SUPPLY: &[u8] = b"total_supply";
@@ -50,6 +51,14 @@ pub struct DelegateInfo {
     pub amount: Uint128,
     pub last_delegate_height: u64,
     pub unbond_flag: bool,
+}
+
+pub fn delegators<S: Storage>(storage: &mut S) -> Singleton<S, Vec<HumanAddr>> {
+    singleton(storage, KEY_DELEGATORS)
+}
+
+pub fn delegators_read<S: ReadonlyStorage>(storage: &S) -> ReadonlySingleton<S, Vec<HumanAddr>> {
+    singleton_read(storage, KEY_DELEGATORS)
 }
 
 /// Investment info is fixed at initialization, and is used to control the function of the contract
