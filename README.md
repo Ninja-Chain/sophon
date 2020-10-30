@@ -30,3 +30,7 @@ You should check out [Developing](./Developing.md) to explain more on how to run
 tests and develop code. Or go through the
 [online tutorial](https://www.cosmwasm.com/docs/getting-started/intro) to get a
 better feel of how to develop.
+
+## License
+
+This software includes the work that is distributed in the [Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0)
