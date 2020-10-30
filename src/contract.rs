@@ -193,75 +193,75 @@ pub fn bond<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
-pub fn unbond<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    info: MessageInfo,
-    amount: Uint128,
-) -> StdResult<HandleResponse> {
-    let sender_raw = deps.api.canonical_address(&info.sender)?;
+// pub fn unbond<S: Storage, A: Api, Q: Querier>(
+//     deps: &mut Extern<S, A, Q>,
+//     env: Env,
+//     info: MessageInfo,
+//     amount: Uint128,
+// ) -> StdResult<HandleResponse> {
+//     let sender_raw = deps.api.canonical_address(&info.sender)?;
 
-    let invest = invest_info_read(&deps.storage).load()?;
-    // ensure it is big enough to care
-    if amount < invest.min_withdrawal {
-        return Err(StdError::generic_err(format!(
-            "Must unbond at least {} {}",
-            invest.min_withdrawal, invest.bond_denom
-        )));
-    }
-    // calculate tax and remainer to unbond
-    let tax = amount * invest.exit_tax;
+//     let invest = invest_info_read(&deps.storage).load()?;
+//     // ensure it is big enough to care
+//     if amount < invest.min_withdrawal {
+//         return Err(StdError::generic_err(format!(
+//             "Must unbond at least {} {}",
+//             invest.min_withdrawal, invest.bond_denom
+//         )));
+//     }
+//     // calculate tax and remainer to unbond
+//     let tax = amount * invest.exit_tax;
 
-    // deduct all from the account
-    let mut accounts = balances(&mut deps.storage);
-    accounts.update(&sender_raw, |balance| -> StdResult<_> {
-        balance.unwrap_or_default() - amount
-    })?;
-    if tax > Uint128(0) {
-        // add tax to the owner
-        accounts.update(&invest.owner, |balance: Option<Uint128>| -> StdResult<_> {
-            Ok(balance.unwrap_or_default() + tax)
-        })?;
-    }
+//     // deduct all from the account
+//     let mut accounts = balances(&mut deps.storage);
+//     accounts.update(&sender_raw, |balance| -> StdResult<_> {
+//         balance.unwrap_or_default() - amount
+//     })?;
+//     if tax > Uint128(0) {
+//         // add tax to the owner
+//         accounts.update(&invest.owner, |balance: Option<Uint128>| -> StdResult<_> {
+//             Ok(balance.unwrap_or_default() + tax)
+//         })?;
+//     }
 
-    // re-calculate bonded to ensure we have real values
-    // bonded is the total number of tokens we have delegated from this address
-    let bonded = get_bonded(&deps.querier, &env.contract.address)?;
+//     // re-calculate bonded to ensure we have real values
+//     // bonded is the total number of tokens we have delegated from this address
+//     let bonded = get_bonded(&deps.querier, &env.contract.address)?;
 
-    // calculate how many native tokens this is worth and update supply
-    let remainder = (amount - tax)?;
-    let mut totals = total_supply(&mut deps.storage);
-    let mut supply = totals.load()?;
-    // TODO: this is just temporary check - we should use dynamic query or have a way to recover
-    assert_bonds(&supply, bonded)?;
-    let unbond = remainder.multiply_ratio(bonded, supply.issued);
-    supply.bonded = (bonded - unbond)?;
-    supply.issued = (supply.issued - remainder)?;
-    supply.claims += unbond;
-    totals.save(&supply)?;
+//     // calculate how many native tokens this is worth and update supply
+//     let remainder = (amount - tax)?;
+//     let mut totals = total_supply(&mut deps.storage);
+//     let mut supply = totals.load()?;
+//     // TODO: this is just temporary check - we should use dynamic query or have a way to recover
+//     assert_bonds(&supply, bonded)?;
+//     let unbond = remainder.multiply_ratio(bonded, supply.issued);
+//     supply.bonded = (bonded - unbond)?;
+//     supply.issued = (supply.issued - remainder)?;
+//     supply.claims += unbond;
+//     totals.save(&supply)?;
 
-    // add a claim to this user to get their tokens after the unbonding period
-    claims(&mut deps.storage).update(&sender_raw, |claim| -> StdResult<_> {
-        Ok(claim.unwrap_or_default() + unbond)
-    })?;
+//     // add a claim to this user to get their tokens after the unbonding period
+//     claims(&mut deps.storage).update(&sender_raw, |claim| -> StdResult<_> {
+//         Ok(claim.unwrap_or_default() + unbond)
+//     })?;
 
-    // unbond them
-    let res = HandleResponse {
-        messages: vec![StakingMsg::Undelegate {
-            validator: invest.validator,
-            amount: coin(unbond.u128(), &invest.bond_denom),
-        }
-        .into()],
-        attributes: vec![
-            attr("action", "unbond"),
-            attr("to", info.sender),
-            attr("unbonded", unbond),
-            attr("burnt", amount),
-        ],
-        data: None,
-    };
-    Ok(res)
-}
+//     // unbond them
+//     let res = HandleResponse {
+//         messages: vec![StakingMsg::Undelegate {
+//             validator: invest.validator,
+//             amount: coin(unbond.u128(), &invest.bond_denom),
+//         }
+//         .into()],
+//         attributes: vec![
+//             attr("action", "unbond"),
+//             attr("to", info.sender),
+//             attr("unbonded", unbond),
+//             attr("burnt", amount),
+//         ],
+//         data: None,
+//     };
+//     Ok(res)
+// }
 
 pub fn claim<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
