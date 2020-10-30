@@ -15,6 +15,7 @@ pub const KEY_TOTAL_SUPPLY: &[u8] = b"total_supply";
 
 pub const PREFIX_BALANCE: &[u8] = b"balance";
 pub const PREFIX_CLAIMS: &[u8] = b"claim";
+pub const PREFIX_DELEGATIONS: &[u8] = b"delegation";
 
 /// balances are state of the erc20 tokens
 pub fn balances<S: Storage>(storage: &mut S) -> Bucket<S, Uint128> {
@@ -32,6 +33,23 @@ pub fn claims<S: Storage>(storage: &mut S) -> Bucket<S, Uint128> {
 
 pub fn claims_read<S: ReadonlyStorage>(storage: &S) -> ReadonlyBucket<S, Uint128> {
     bucket_read(storage, PREFIX_CLAIMS)
+}
+
+pub fn delegations<S: Storage>(storage: &mut S) -> Bucket<S, DelegateInfo> {
+    bucket(storage, PREFIX_DELEGATIONS)
+}
+
+pub fn delegations_read<S: ReadonlyStorage>(storage: &S) -> ReadonlyBucket<S, DelegateInfo> {
+    bucket_read(storage, PREFIX_DELEGATIONS)
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct DelegateInfo {
+    pub delegator: HumanAddr,
+    pub validator: HumanAddr,
+    pub amount: Uint128,
+    pub last_delegate_height: u64,
+    pub unbond_flag: bool,
 }
 
 /// Investment info is fixed at initialization, and is used to control the function of the contract
