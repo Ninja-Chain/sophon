@@ -7,7 +7,7 @@ use cosmwasm_storage::{
     Singleton,
 };
 
-use crate::msg::TokenInfoResponse;
+use crate::msg::{DelegateResponse, TokenInfoResponse};
 
 pub const KEY_DELEGATORS: &[u8] = b"delegator";
 pub const KEY_INVESTMENT: &[u8] = b"invest";
@@ -40,7 +40,7 @@ pub fn delegations<S: Storage>(storage: &mut S) -> Bucket<S, DelegateInfo> {
     bucket(storage, PREFIX_DELEGATIONS)
 }
 
-pub fn delegations_read<S: ReadonlyStorage>(storage: &S) -> ReadonlyBucket<S, DelegateInfo> {
+pub fn delegations_read<S: ReadonlyStorage>(storage: &S) -> ReadonlyBucket<S, DelegateResponse> {
     bucket_read(storage, PREFIX_DELEGATIONS)
 }
 

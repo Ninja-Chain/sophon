@@ -4,8 +4,8 @@ use std::fs::create_dir_all;
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
 use sophon::msg::{
-    BalanceResponse, ClaimsResponse, HandleMsg, InitMsg, InvestmentResponse, QueryMsg,
-    TokenInfoResponse,
+    BalanceResponse, ClaimsResponse, DelegateResponse, HandleMsg, InitMsg, InvestmentResponse,
+    QueryMsg, TokenInfoResponse,
 };
 use sophon::state::{InvestmentInfo, Supply};
 
@@ -20,6 +20,7 @@ fn main() {
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(BalanceResponse), &out_dir);
     export_schema(&schema_for!(ClaimsResponse), &out_dir);
+    export_schema(&schema_for!(DelegateResponse), &out_dir);
     export_schema(&schema_for!(InvestmentResponse), &out_dir);
     export_schema(&schema_for!(TokenInfoResponse), &out_dir);
     export_schema(&schema_for!(InvestmentInfo), &out_dir);

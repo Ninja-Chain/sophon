@@ -77,6 +77,15 @@ pub struct ClaimsResponse {
     pub claims: Uint128,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DelegateResponse{
+    pub delegator: HumanAddr,
+    pub validator: HumanAddr,
+    pub amount: Uint128,
+    pub last_delegate_height: u64,
+    pub unbond_flag: bool,
+}
+
 /// TokenInfoResponse is info to display the derivative token in a UI
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TokenInfoResponse {
