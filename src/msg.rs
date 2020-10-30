@@ -84,6 +84,7 @@ pub struct DelegateResponse{
     pub amount: Uint128,
     pub last_delegate_height: u64,
     pub unbond_flag: bool,
+    pub undelegate_reward: Uint128,
 }
 
 /// TokenInfoResponse is info to display the derivative token in a UI
