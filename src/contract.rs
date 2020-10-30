@@ -412,15 +412,25 @@ fn unbond<S: Storage, A: Api, Q: Querier> (
     deps: &mut Extern<S, A, Q>,
     delegator: HumanAddr
 ) -> StdResult<Handleresponse> {
-    // アドレスに対応するDelegateInfoのamountをクエリする
+    // アドレスに対応するDelegateInfoのamountとundelegate_rewardをクエリする
+    let delegation = query_delegation(delegator)?;
+    let amount = delegation.amount;
+    let undelegate_reward = delegation.undelegate_reward;
 
     // アドレスに対応するDelegateInfoのunbond_flagをfalseに、amountを0に更新する
+    let key = deps.api.canonical_address(&delegator)?;
+    delegations(&mut deps.storage).update(&key, |delegateInfo| -> StdResult<_> {
+        delegateInfo.unbond_flag = false;
+        delegateInfo.amount = 0;
+        delegateInfo.undelegate_reward = 0;
+        Ok(delegateInfo)
+    })
 
     // 引数のアドレスに対して、amountの量のstakeを送金する
     send_tokens(
         env.contract.address,
         delegator,
-        amount,
+        amount + undelegate_reward,
         "approve",
     )
 }
