@@ -1,7 +1,7 @@
 use cosmwasm_std::{
     attr, coin, to_binary, Api, BankMsg, Binary, Decimal, Env, Extern, HandleResponse, HumanAddr,
-    InitResponse, MessageInfo, Querier, StakingMsg, StdError, StdResult, Storage, Uint128, WasmMsg,
-    QueryRequest, Validator, ValidatorsResponse, StakingQuery
+    InitResponse, MessageInfo, Querier, QueryRequest, StakingMsg, StakingQuery, StdError,
+    StdResult, Storage, Uint128, Validator, ValidatorsResponse, WasmMsg,
 };
 
 use crate::errors::{StakingError, Unauthorized};
@@ -390,6 +390,23 @@ pub fn _bond_all_tokens<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
+fn select_validator<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+) -> StdResult<Validator> {
+    let validators = deps.querier.query_validators()?;
+    let min_commission = validators
+        .iter()
+        .min_by_key(|v| v.commission)
+        .unwrap()
+        .commission;
+    let validator = validators
+        .iter()
+        .filter(|v| v.commission == min_commission)
+        .min_by_key(|v| v.max_change_rate)
+        .unwrap();
+    Ok(validator.clone())
+}
+
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     _env: Env,
@@ -400,7 +417,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Investment {} => to_binary(&query_investment(deps)?),
         QueryMsg::Balance { address } => to_binary(&query_balance(deps, address)?),
         QueryMsg::Claims { address } => to_binary(&query_claims(deps, address)?),
-        QueryMsg::Validators {} => to_binary(&query_validators(deps)?)
+        QueryMsg::Validators {} => to_binary(&query_validators(deps)?),
     }
 }
 
@@ -477,6 +494,20 @@ mod tests {
             commission: Decimal::percent(3),
             max_commission: Decimal::percent(10),
             max_change_rate: Decimal::percent(1),
+        }
+    }
+
+    fn custom_sample_validator<U: Into<HumanAddr>>(
+        addr: U,
+        comm: u64,
+        max_comm: u64,
+        rate: u64,
+    ) -> Validator {
+        Validator {
+            address: addr.into(),
+            commission: Decimal::percent(comm),
+            max_commission: Decimal::percent(max_comm),
+            max_change_rate: Decimal::percent(rate),
         }
     }
 
@@ -820,5 +851,22 @@ mod tests {
         assert_eq!(invest.token_supply, bobs_balance + owner_cut);
         assert_eq!(invest.staked_tokens, coin(690, "ustake")); // 1500 - 810
         assert_eq!(invest.nominal_value, ratio);
+    }
+
+    #[test]
+    fn select_best_validator() {
+        let mut deps = mock_dependencies(&[]);
+        deps.querier.update_staking(
+            "ustake",
+            &[
+                custom_sample_validator("john", 1, 10, 5),
+                custom_sample_validator("mary", 2, 10, 1),
+                custom_sample_validator("my-validator", 1, 10, 3),
+            ],
+            &[],
+        );
+        let validator = select_validator(&mut deps).unwrap();
+
+        assert_eq!(validator, custom_sample_validator("my-validator", 1, 10, 3));
     }
 }
