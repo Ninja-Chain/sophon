@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    attr, coin, to_binary, Api, BankMsg, Binary, Decimal, Env, Extern, HandleResponse, HumanAddr,
+    attr, coin, Coin, to_binary, Api, CosmosMsg, BankMsg, Binary, Decimal, Env, Extern, HandleResponse, HumanAddr,
     InitResponse, MessageInfo, Querier, QueryRequest, StakingMsg, StakingQuery, StdError,
     StdResult, Storage, Uint128, Validator, ValidatorsResponse, WasmMsg,
 };
@@ -10,7 +10,7 @@ use crate::msg::{
     QueryMsg, TokenInfoResponse,
 };
 use crate::state::{
-    balances, balances_read, claims, claims_read, delegations_read, delegators, delegators_read,
+    balances, balances_read, claims, claims_read, delegations, delegations_read, delegators, delegators_read,
     invest_info, invest_info_read, token_info, token_info_read, total_supply, total_supply_read,
     InvestmentInfo, Supply,
 };
@@ -68,7 +68,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             Ok(transfer(deps, env, info, recipient, amount)?)
         }
         HandleMsg::Bond {} => Ok(bond(deps, env, info)?),
-        HandleMsg::Unbond { amount } => Ok(unbond(deps, env, info, amount)?),
+        // HandleMsg::Unbond {} => Ok(reserve_unbond(deps, env, info)?),
         HandleMsg::Claim {} => Ok(claim(deps, env, info)?),
         HandleMsg::Reinvest {} => Ok(reinvest(deps, env, info)?),
         HandleMsg::_BondAllTokens {} => _bond_all_tokens(deps, env, info),
@@ -410,27 +410,31 @@ fn select_validator<S: Storage, A: Api, Q: Querier>(
 
 fn unbond<S: Storage, A: Api, Q: Querier> (
     deps: &mut Extern<S, A, Q>,
+    env: Env,
     delegator: HumanAddr
-) -> StdResult<Handleresponse> {
+) -> StdResult<HandleResponse> {
     // アドレスに対応するDelegateInfoのamountとundelegate_rewardをクエリする
-    let delegation = query_delegation(delegator)?;
+    let delegation = query_delegation(deps,delegator)?;
     let amount = delegation.amount;
     let undelegate_reward = delegation.undelegate_reward;
 
     // アドレスに対応するDelegateInfoのunbond_flagをfalseに、amountを0に更新する
     let key = deps.api.canonical_address(&delegator)?;
-    delegations(&mut deps.storage).update(&key, |delegateInfo| -> StdResult<_> {
-        delegateInfo.unbond_flag = false;
-        delegateInfo.amount = 0;
-        delegateInfo.undelegate_reward = 0;
-        Ok(delegateInfo)
-    })
+    // TODO :fix
+    delegations(&mut deps.storage).update(key.as_slice(), |delegateInfo| -> StdResult<_> {
+        delegateInfo.unwrap().unbond_flag = false;
+        delegateInfo.unwrap().amount = Uint128::zero();
+        delegateInfo.unwrap().undelegate_reward = Uint128::zero();
+        Ok(delegateInfo.unwrap())
+    });
+
+    let unbound_amount = vec![Coin::new((amount + undelegate_reward).u128(), "stake")];
 
     // 引数のアドレスに対して、amountの量のstakeを送金する
     send_tokens(
         env.contract.address,
         delegator,
-        amount + undelegate_reward,
+        unbound_amount,
         "approve",
     )
 }
@@ -440,7 +444,7 @@ fn send_tokens(
     to_address: HumanAddr,
     amount: Vec<Coin>,
     action: &str,
-) -> Result<HandleResponse> {
+) -> StdResult<HandleResponse> {
     let attributes = vec![attr("action", action), attr("to", to_address.clone())];
 
     let r = HandleResponse {
@@ -454,6 +458,7 @@ fn send_tokens(
     };
     Ok(r)
 }
+
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     _env: Env,

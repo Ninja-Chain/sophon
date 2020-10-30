@@ -37,7 +37,7 @@ pub enum HandleMsg {
     Bond {},
     /// Unbond will "burn" the given amount of derivative tokens and send the unbonded
     /// staking tokens to the message sender (after exit tax is deducted)
-    Unbond { amount: Uint128 },
+    // Unbond {},
     /// Claim is used to claim your native tokens that you previously "unbonded"
     /// after the chain-defined waiting period (eg. 3 weeks)
     Claim {},
