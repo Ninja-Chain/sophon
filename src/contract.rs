@@ -276,10 +276,8 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         .iter()
         .filter(|delegation| delegation.validator == validator_addr);
 
-    let mut delegator_list = vec![];
-    let mut amount_list = vec![];
     let mut total_amount = Uint128::zero();
-    for delegation in delegations_of_val {
+    for delegation in delegations_of_val.clone() {
         total_amount += delegation.amount
     }
 
@@ -294,16 +292,17 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         .querier
         .query_balance(&env.contract.address, &invest.bond_denom)?;
 
-    let reward = balance.amount - total_amount;
+    let reward = (balance.amount - total_amount).unwrap();
 
     for delegation in delegations_of_val {
         let key = deps.api.canonical_address(&delegation.delegator)?;
-        delegations(&mut deps.storage).update(&key, |delegateInfo| -> StdResult<_> {
-            delegateInfo.unwrap().undelegate_reward = reward
-                .unwrap()
+        delegations(&mut deps.storage).update(key.as_slice(), |delegate_info| -> StdResult<_> {
+            let mut new_delegate_info = delegate_info.unwrap();
+            new_delegate_info.undelegate_reward = reward
+                .clone()
                 .multiply_ratio(delegation.amount, total_amount);
-            Ok(delegateInfo.unwrap())
-        });
+            Ok(new_delegate_info)
+        })?;
     }
 
     Ok(HandleResponse {
