@@ -70,7 +70,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Bond {} => Ok(bond(deps, env, info)?),
         HandleMsg::Unbond { amount } => Ok(unbond(deps, env, info, amount)?),
         HandleMsg::Claim {} => Ok(claim(deps, env, info)?),
-        HandleMsg::Reinvest {} => Ok(reinvest(deps, env, info)?),
+        HandleMsg::Reinvest { delegator } => Ok(reinvest(deps, env, info, delegator)?),
         HandleMsg::_BondAllTokens {} => _bond_all_tokens(deps, env, info),
     }
 }
@@ -368,32 +368,99 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
 pub fn reinvest<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
+    delegator: HumanAddr,
 ) -> StdResult<HandleResponse> {
-    let contract_addr = env.contract.address;
-    let invest = invest_info_read(&deps.storage).load()?;
-    let msg = to_binary(&HandleMsg::_BondAllTokens {})?;
+    let _ = claim(deps, env.clone(), info);
 
-    // and bond them to the validator
-    let res = HandleResponse {
+    let best_validator = select_validator(deps)?;
+
+    let delegator_raw = deps.api.canonical_address(&delegator)?;
+    let delegate_info = delegations_read(&deps.storage)
+        .may_load(delegator_raw.as_slice())
+        .unwrap_or_default()
+        .unwrap();
+    let prev_validator = delegate_info.validator;
+    let undelegated_amount = delegate_info.undelegate_reward;
+    let delegated_amount = delegate_info.amount;
+
+    delegations(&mut deps.storage).update(
+        delegator_raw.as_slice(),
+        |delegate_info| -> StdResult<_> {
+            let mut new_delegate_info = delegate_info.unwrap();
+            new_delegate_info.undelegate_reward = Uint128::zero();
+            new_delegate_info.amount += undelegated_amount;
+            new_delegate_info.validator = best_validator.address.clone();
+            new_delegate_info.last_delegate_height = env.block.height;
+            Ok(new_delegate_info)
+        },
+    )?;
+
+    let token_info_res = query_token_info(deps)?;
+
+    let attributes = vec![
+        attr("action", "reinvest"),
+        attr("prev_validator", prev_validator.clone()),
+        attr("new_validator", best_validator.address.clone()),
+        attr(
+            "amount",
+            undelegated_amount.clone() + delegated_amount.clone(),
+        ),
+    ];
+
+    let r = HandleResponse {
         messages: vec![
-            StakingMsg::Withdraw {
-                validator: invest.validator,
-                recipient: Some(contract_addr.clone()),
+            StakingMsg::Delegate {
+                amount: coin(undelegated_amount.u128(), token_info_res.name.clone()),
+                validator: best_validator.address.clone(),
             }
             .into(),
-            WasmMsg::Execute {
-                contract_addr,
-                msg,
-                send: vec![],
+            StakingMsg::Redelegate {
+                amount: coin(delegated_amount.u128(), token_info_res.name),
+                dst_validator: best_validator.address,
+                src_validator: prev_validator,
             }
             .into(),
         ],
-        attributes: vec![],
+        attributes,
         data: None,
     };
-    Ok(res)
+
+    Ok(r)
 }
+
+/// reinvest will withdraw all pending rewards,
+/// then issue a callback to itself via _bond_all_tokens
+/// to reinvest the new earnings (and anything else that accumulated)
+// pub fn reinvest<S: Storage, A: Api, Q: Querier>(
+//     deps: &mut Extern<S, A, Q>,
+//     env: Env,
+//     _info: MessageInfo,
+// ) -> StdResult<HandleResponse> {
+//     let contract_addr = env.contract.address;
+//     let invest = invest_info_read(&deps.storage).load()?;
+//     let msg = to_binary(&HandleMsg::_BondAllTokens {})?;
+
+//     // and bond them to the validator
+//     let res = HandleResponse {
+//         messages: vec![
+//             StakingMsg::Withdraw {
+//                 validator: invest.validator,
+//                 recipient: Some(contract_addr.clone()),
+//             }
+//             .into(),
+//             WasmMsg::Execute {
+//                 contract_addr,
+//                 msg,
+//                 send: vec![],
+//             }
+//             .into(),
+//         ],
+//         attributes: vec![],
+//         data: None,
+//     };
+//     Ok(res)
+// }
 
 pub fn _bond_all_tokens<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
