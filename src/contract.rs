@@ -10,9 +10,9 @@ use crate::msg::{
     QueryMsg, TokenInfoResponse,
 };
 use crate::state::{
-    balances, balances_read, claims, claims_read, delegations_read, delegators, delegators_read,
-    invest_info, invest_info_read, token_info, token_info_read, total_supply, total_supply_read,
-    InvestmentInfo, Supply,
+    balances, balances_read, claims, claims_read, delegations, delegations_read, delegators,
+    delegators_read, invest_info, invest_info_read, token_info, token_info_read, total_supply,
+    total_supply_read, InvestmentInfo, Supply,
 };
 
 const FALLBACK_RATIO: Decimal = Decimal::one();
@@ -268,51 +268,99 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     info: MessageInfo,
-) -> StdResult<HandleResponse> {
-    // find how many tokens the contract has
-    let invest = invest_info_read(&deps.storage).load()?;
-    let mut balance = deps
-        .querier
-        .query_balance(&env.contract.address, &invest.bond_denom)?;
-    if balance.amount < invest.min_withdrawal {
-        return Err(StdError::generic_err(
-            "Insufficient balance in contract to process claim",
-        ));
+) -> Result<HandleResponse, StakingError> {
+    let address = info.sender.clone();
+    let validator_addr = query_delegation(deps, address).unwrap().validator;
+    let all_delegations = query_all_delegations(deps).unwrap();
+    let delegations_of_val = all_delegations
+        .iter()
+        .filter(|delegation| delegation.validator == validator_addr);
+
+    let mut total_amount = Uint128::zero();
+    for delegation in delegations_of_val.clone() {
+        total_amount += delegation.amount
     }
 
-    // check how much to send - min(balance, claims[sender]), and reduce the claim
-    let sender_raw = deps.api.canonical_address(&info.sender)?;
-    let mut to_send = balance.amount;
-    claims(&mut deps.storage).update(sender_raw.as_slice(), |claim| {
-        let claim = claim.ok_or_else(|| StdError::generic_err("no claim for this address"))?;
-        to_send = to_send.min(claim);
-        claim - to_send
-    })?;
+    // this is just meant as a call-back to ourself
+    if info.sender != env.contract.address {
+        return Err(Unauthorized {}.build());
+    }
 
-    // update total supply (lower claim)
-    total_supply(&mut deps.storage).update(|mut supply| -> StdResult<_> {
-        supply.claims = (supply.claims - to_send)?;
-        Ok(supply)
-    })?;
+    // find how many tokens we have to bond
+    let invest = invest_info_read(&deps.storage).load()?;
+    let balance = deps
+        .querier
+        .query_balance(&env.contract.address, &invest.bond_denom)?;
 
-    // transfer tokens to the sender
-    balance.amount = to_send;
-    let res = HandleResponse {
-        messages: vec![BankMsg::Send {
-            from_address: env.contract.address,
-            to_address: info.sender.clone(),
-            amount: vec![balance],
-        }
-        .into()],
-        attributes: vec![
-            attr("action", "claim"),
-            attr("from", info.sender),
-            attr("amount", to_send),
-        ],
+    let reward = (balance.amount - total_amount).unwrap();
+
+    for delegation in delegations_of_val {
+        let key = deps.api.canonical_address(&delegation.delegator)?;
+        delegations(&mut deps.storage).update(key.as_slice(), |delegate_info| -> StdResult<_> {
+            let mut new_delegate_info = delegate_info.unwrap();
+            new_delegate_info.undelegate_reward = reward
+                .clone()
+                .multiply_ratio(delegation.amount, total_amount);
+            Ok(new_delegate_info)
+        })?;
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        attributes: vec![],
         data: None,
-    };
-    Ok(res)
+    })
 }
+
+// pub fn claim<S: Storage, A: Api, Q: Querier>(
+//     deps: &mut Extern<S, A, Q>,
+//     env: Env,
+//     info: MessageInfo,
+// ) -> StdResult<HandleResponse> {
+//     // find how many tokens the contract has
+//     let invest = invest_info_read(&deps.storage).load()?;
+//     let mut balance = deps
+//         .querier
+//         .query_balance(&env.contract.address, &invest.bond_denom)?;
+//     if balance.amount < invest.min_withdrawal {
+//         return Err(StdError::generic_err(
+//             "Insufficient balance in contract to process claim",
+//         ));
+//     }
+
+//     // check how much to send - min(balance, claims[sender]), and reduce the claim
+//     let sender_raw = deps.api.canonical_address(&info.sender)?;
+//     let mut to_send = balance.amount;
+//     claims(&mut deps.storage).update(sender_raw.as_slice(), |claim| {
+//         let claim = claim.ok_or_else(|| StdError::generic_err("no claim for this address"))?;
+//         to_send = to_send.min(claim);
+//         claim - to_send
+//     })?;
+
+//     // update total supply (lower claim)
+//     total_supply(&mut deps.storage).update(|mut supply| -> StdResult<_> {
+//         supply.claims = (supply.claims - to_send)?;
+//         Ok(supply)
+//     })?;
+
+//     // transfer tokens to the sender
+//     balance.amount = to_send;
+//     let res = HandleResponse {
+//         messages: vec![BankMsg::Send {
+//             from_address: env.contract.address,
+//             to_address: info.sender.clone(),
+//             amount: vec![balance],
+//         }
+//         .into()],
+//         attributes: vec![
+//             attr("action", "claim"),
+//             attr("from", info.sender),
+//             attr("amount", to_send),
+//         ],
+//         data: None,
+//     };
+//     Ok(res)
+// }
 
 /// reinvest will withdraw all pending rewards,
 /// then issue a callback to itself via _bond_all_tokens
