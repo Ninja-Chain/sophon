@@ -411,22 +411,23 @@ fn select_validator<S: Storage, A: Api, Q: Querier>(
 fn unbond<S: Storage, A: Api, Q: Querier> (
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    delegator: HumanAddr
+    delegator: HumanAddr,
 ) -> StdResult<HandleResponse> {
     // アドレスに対応するDelegateInfoのamountとundelegate_rewardをクエリする
-    let delegation = query_delegation(deps,delegator)?;
+    let delegation = query_delegation(deps,delegator.clone())?;
     let amount = delegation.amount;
     let undelegate_reward = delegation.undelegate_reward;
 
     // アドレスに対応するDelegateInfoのunbond_flagをfalseに、amountを0に更新する
-    let key = deps.api.canonical_address(&delegator)?;
-    // TODO :fix
-    delegations(&mut deps.storage).update(key.as_slice(), |delegateInfo| -> StdResult<_> {
-        delegateInfo.unwrap().unbond_flag = false;
-        delegateInfo.unwrap().amount = Uint128::zero();
-        delegateInfo.unwrap().undelegate_reward = Uint128::zero();
-        Ok(delegateInfo.unwrap())
-    });
+    let key = deps.api.canonical_address(&delegation.delegator)?;
+    delegations(&mut deps.storage).update(key.as_slice(), |delegate_info| -> StdResult<_> {
+        let mut new_delegate_info = delegate_info.unwrap();
+        new_delegate_info.unbond_flag = false;
+        new_delegate_info.amount = Uint128::zero();
+        new_delegate_info.undelegate_reward = Uint128::zero();
+
+        Ok(new_delegate_info)
+    })?;
 
     let unbound_amount = vec![Coin::new((amount + undelegate_reward).u128(), "stake")];
 
