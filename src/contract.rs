@@ -1,7 +1,7 @@
 use cosmwasm_std::{
-    attr, coin, to_binary, Api, BankMsg, Binary, Decimal, Env, Extern, HandleResponse, HumanAddr,
+    attr, coin, Coin, to_binary, Api, CosmosMsg, BankMsg, Binary, Decimal, Env, Extern, HandleResponse, HumanAddr,
     InitResponse, MessageInfo, Querier, QueryRequest, StakingMsg, StakingQuery, StdError,
-    StdResult, Storage, Uint128, Validator, ValidatorsResponse, WasmMsg,
+    StdResult, Storage, Uint128, Validator, ValidatorsResponse
 };
 
 use crate::errors::{StakingError, Unauthorized};
@@ -10,7 +10,7 @@ use crate::msg::{
     QueryMsg, TokenInfoResponse,
 };
 use crate::state::{
-    balances, balances_read, claims, claims_read, delegations, delegations_read, delegators,
+    balances, balances_read, claims_read, delegations, delegations_read, delegators,
     delegators_read, invest_info, invest_info_read, token_info, token_info_read, total_supply,
     total_supply_read, InvestmentInfo, Supply,
 };
@@ -68,7 +68,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             Ok(transfer(deps, env, info, recipient, amount)?)
         }
         HandleMsg::Bond {} => Ok(bond(deps, env, info)?),
-        HandleMsg::Unbond { amount } => Ok(unbond(deps, env, info, amount)?),
+        // HandleMsg::Unbond {} => Ok(reserve_unbond(deps, env, info)?),
         HandleMsg::Claim {} => Ok(claim(deps, env, info)?),
         HandleMsg::Reinvest { delegator } => Ok(reinvest(deps, env, info, delegator)?),
         HandleMsg::_BondAllTokens {} => _bond_all_tokens(deps, env, info),
@@ -194,76 +194,6 @@ pub fn bond<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
-pub fn unbond<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    info: MessageInfo,
-    amount: Uint128,
-) -> StdResult<HandleResponse> {
-    let sender_raw = deps.api.canonical_address(&info.sender)?;
-
-    let invest = invest_info_read(&deps.storage).load()?;
-    // ensure it is big enough to care
-    if amount < invest.min_withdrawal {
-        return Err(StdError::generic_err(format!(
-            "Must unbond at least {} {}",
-            invest.min_withdrawal, invest.bond_denom
-        )));
-    }
-    // calculate tax and remainer to unbond
-    let tax = amount * invest.exit_tax;
-
-    // deduct all from the account
-    let mut accounts = balances(&mut deps.storage);
-    accounts.update(&sender_raw, |balance| -> StdResult<_> {
-        balance.unwrap_or_default() - amount
-    })?;
-    if tax > Uint128(0) {
-        // add tax to the owner
-        accounts.update(&invest.owner, |balance: Option<Uint128>| -> StdResult<_> {
-            Ok(balance.unwrap_or_default() + tax)
-        })?;
-    }
-
-    // re-calculate bonded to ensure we have real values
-    // bonded is the total number of tokens we have delegated from this address
-    let bonded = get_bonded(&deps.querier, &env.contract.address)?;
-
-    // calculate how many native tokens this is worth and update supply
-    let remainder = (amount - tax)?;
-    let mut totals = total_supply(&mut deps.storage);
-    let mut supply = totals.load()?;
-    // TODO: this is just temporary check - we should use dynamic query or have a way to recover
-    assert_bonds(&supply, bonded)?;
-    let unbond = remainder.multiply_ratio(bonded, supply.issued);
-    supply.bonded = (bonded - unbond)?;
-    supply.issued = (supply.issued - remainder)?;
-    supply.claims += unbond;
-    totals.save(&supply)?;
-
-    // add a claim to this user to get their tokens after the unbonding period
-    claims(&mut deps.storage).update(&sender_raw, |claim| -> StdResult<_> {
-        Ok(claim.unwrap_or_default() + unbond)
-    })?;
-
-    // unbond them
-    let res = HandleResponse {
-        messages: vec![StakingMsg::Undelegate {
-            validator: invest.validator,
-            amount: coin(unbond.u128(), &invest.bond_denom),
-        }
-        .into()],
-        attributes: vec![
-            attr("action", "unbond"),
-            attr("to", info.sender),
-            attr("unbonded", unbond),
-            attr("burnt", amount),
-        ],
-        data: None,
-    };
-    Ok(res)
-}
-
 pub fn claim<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -311,56 +241,6 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
         data: None,
     })
 }
-
-// pub fn claim<S: Storage, A: Api, Q: Querier>(
-//     deps: &mut Extern<S, A, Q>,
-//     env: Env,
-//     info: MessageInfo,
-// ) -> StdResult<HandleResponse> {
-//     // find how many tokens the contract has
-//     let invest = invest_info_read(&deps.storage).load()?;
-//     let mut balance = deps
-//         .querier
-//         .query_balance(&env.contract.address, &invest.bond_denom)?;
-//     if balance.amount < invest.min_withdrawal {
-//         return Err(StdError::generic_err(
-//             "Insufficient balance in contract to process claim",
-//         ));
-//     }
-
-//     // check how much to send - min(balance, claims[sender]), and reduce the claim
-//     let sender_raw = deps.api.canonical_address(&info.sender)?;
-//     let mut to_send = balance.amount;
-//     claims(&mut deps.storage).update(sender_raw.as_slice(), |claim| {
-//         let claim = claim.ok_or_else(|| StdError::generic_err("no claim for this address"))?;
-//         to_send = to_send.min(claim);
-//         claim - to_send
-//     })?;
-
-//     // update total supply (lower claim)
-//     total_supply(&mut deps.storage).update(|mut supply| -> StdResult<_> {
-//         supply.claims = (supply.claims - to_send)?;
-//         Ok(supply)
-//     })?;
-
-//     // transfer tokens to the sender
-//     balance.amount = to_send;
-//     let res = HandleResponse {
-//         messages: vec![BankMsg::Send {
-//             from_address: env.contract.address,
-//             to_address: info.sender.clone(),
-//             amount: vec![balance],
-//         }
-//         .into()],
-//         attributes: vec![
-//             attr("action", "claim"),
-//             attr("from", info.sender),
-//             attr("amount", to_send),
-//         ],
-//         data: None,
-//     };
-//     Ok(res)
-// }
 
 /// reinvest will withdraw all pending rewards,
 /// then issue a callback to itself via _bond_all_tokens
@@ -429,39 +309,6 @@ pub fn reinvest<S: Storage, A: Api, Q: Querier>(
     Ok(r)
 }
 
-/// reinvest will withdraw all pending rewards,
-/// then issue a callback to itself via _bond_all_tokens
-/// to reinvest the new earnings (and anything else that accumulated)
-// pub fn reinvest<S: Storage, A: Api, Q: Querier>(
-//     deps: &mut Extern<S, A, Q>,
-//     env: Env,
-//     _info: MessageInfo,
-// ) -> StdResult<HandleResponse> {
-//     let contract_addr = env.contract.address;
-//     let invest = invest_info_read(&deps.storage).load()?;
-//     let msg = to_binary(&HandleMsg::_BondAllTokens {})?;
-
-//     // and bond them to the validator
-//     let res = HandleResponse {
-//         messages: vec![
-//             StakingMsg::Withdraw {
-//                 validator: invest.validator,
-//                 recipient: Some(contract_addr.clone()),
-//             }
-//             .into(),
-//             WasmMsg::Execute {
-//                 contract_addr,
-//                 msg,
-//                 send: vec![],
-//             }
-//             .into(),
-//         ],
-//         attributes: vec![],
-//         data: None,
-//     };
-//     Ok(res)
-// }
-
 pub fn _bond_all_tokens<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -522,6 +369,66 @@ fn select_validator<S: Storage, A: Api, Q: Querier>(
         .unwrap();
     Ok(validator.clone())
 }
+
+fn unbond<S: Storage, A: Api, Q: Querier> (
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    delegator: HumanAddr,
+) -> StdResult<HandleResponse> {
+    // アドレスに対応するDelegateInfoのamountとundelegate_rewardをクエリする
+    let delegation = query_delegation(deps,delegator.clone())?;
+    let amount = delegation.amount;
+    let undelegate_reward = delegation.undelegate_reward;
+
+    // アドレスに対応するDelegateInfoのunbond_flagをfalseに、amountを0に更新する
+    let key = deps.api.canonical_address(&delegation.delegator)?;
+    delegations(&mut deps.storage).update(key.as_slice(), |delegate_info| -> StdResult<_> {
+        let mut new_delegate_info = delegate_info.unwrap();
+        new_delegate_info.unbond_flag = false;
+        new_delegate_info.amount = Uint128::zero();
+        new_delegate_info.undelegate_reward = Uint128::zero();
+
+        Ok(new_delegate_info)
+    })?;
+
+    let unbound_amount = vec![Coin::new((amount + undelegate_reward).u128(), "stake")];
+
+    // 引数のアドレスに対して、amountの量のstakeを送金する
+    send_tokens(
+        env.contract.address,
+        delegator,
+        unbound_amount,
+        "approve",
+    )
+}
+
+fn send_tokens(
+    from_address: HumanAddr,
+    to_address: HumanAddr,
+    amount: Vec<Coin>,
+    action: &str,
+) -> StdResult<HandleResponse> {
+    let attributes = vec![attr("action", action), attr("to", to_address.clone())];
+
+    let r = HandleResponse {
+        messages: vec![CosmosMsg::Bank(BankMsg::Send {
+            from_address,
+            to_address,
+            amount,
+        })],
+        attributes,
+        data: None,
+    };
+    Ok(r)
+}
+
+fn is_expired<S: Storage, A: Api, Q: Querier> (
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> StdResult<HandleResponse> {
+
+}
+
 
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
