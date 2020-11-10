@@ -69,8 +69,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         }
         HandleMsg::Bond {} => Ok(bond(deps, env, info)?),
         // HandleMsg::Unbond {} => Ok(reserve_unbond(deps, env, info)?),
-        HandleMsg::Claim {} => Ok(claim(deps, env, info)?),
-        HandleMsg::Reinvest { delegator } => Ok(reinvest(deps, env, info, delegator)?),
         HandleMsg::_BondAllTokens {} => _bond_all_tokens(deps, env, info),
     }
 }
@@ -194,7 +192,7 @@ pub fn bond<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
-pub fn claim<S: Storage, A: Api, Q: Querier>(
+fn claim<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     info: MessageInfo,
@@ -245,7 +243,7 @@ pub fn claim<S: Storage, A: Api, Q: Querier>(
 /// reinvest will withdraw all pending rewards,
 /// then issue a callback to itself via _bond_all_tokens
 /// to reinvest the new earnings (and anything else that accumulated)
-pub fn reinvest<S: Storage, A: Api, Q: Querier>(
+fn reinvest<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     info: MessageInfo,
