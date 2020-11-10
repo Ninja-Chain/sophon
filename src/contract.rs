@@ -10,7 +10,7 @@ use crate::msg::{
     QueryMsg, TokenInfoResponse,
 };
 use crate::state::{
-    balances, balances_read, claims_read, delegations, delegations_read,
+    balances, balances_read, claims_read, delegations, delegations_read, delegators
     delegators_read, invest_info, invest_info_read, token_info, token_info_read, total_supply,
     total_supply_read, InvestmentInfo, Supply,
 };
@@ -309,39 +309,6 @@ pub fn reinvest<S: Storage, A: Api, Q: Querier>(
     Ok(r)
 }
 
-/// reinvest will withdraw all pending rewards,
-/// then issue a callback to itself via _bond_all_tokens
-/// to reinvest the new earnings (and anything else that accumulated)
-// pub fn reinvest<S: Storage, A: Api, Q: Querier>(
-//     deps: &mut Extern<S, A, Q>,
-//     env: Env,
-//     _info: MessageInfo,
-// ) -> StdResult<HandleResponse> {
-//     let contract_addr = env.contract.address;
-//     let invest = invest_info_read(&deps.storage).load()?;
-//     let msg = to_binary(&HandleMsg::_BondAllTokens {})?;
-
-//     // and bond them to the validator
-//     let res = HandleResponse {
-//         messages: vec![
-//             StakingMsg::Withdraw {
-//                 validator: invest.validator,
-//                 recipient: Some(contract_addr.clone()),
-//             }
-//             .into(),
-//             WasmMsg::Execute {
-//                 contract_addr,
-//                 msg,
-//                 send: vec![],
-//             }
-//             .into(),
-//         ],
-//         attributes: vec![],
-//         data: None,
-//     };
-//     Ok(res)
-// }
-
 pub fn _bond_all_tokens<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -454,6 +421,14 @@ fn send_tokens(
     };
     Ok(r)
 }
+
+fn is_expired<S: Storage, A: Api, Q: Querier> (
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> StdResult<HandleResponse> {
+
+}
+
 
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
