@@ -38,13 +38,6 @@ pub enum HandleMsg {
     /// Unbond will "burn" the given amount of derivative tokens and send the unbonded
     /// staking tokens to the message sender (after exit tax is deducted)
     // Unbond {},
-    /// Claim is used to claim your native tokens that you previously "unbonded"
-    /// after the chain-defined waiting period (eg. 3 weeks)
-    Claim {},
-    /// Reinvest will check for all accumulated rewards, withdraw them, and
-    /// re-bond them to the same validator. Anyone can call this, which updates
-    /// the value of the token (how much under custody).
-    Reinvest { delegator: HumanAddr },
     /// _BondAllTokens can only be called by the contract itself, after all rewards have been
     /// withdrawn. This is an example of using "callbacks" in message flows.
     /// This can only be invoked by the contract itself as a return from Reinvest
