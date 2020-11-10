@@ -425,7 +425,26 @@ fn send_tokens(
 fn is_expired<S: Storage, A: Api, Q: Querier> (
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    info: MessageInfo,
 ) -> StdResult<HandleResponse> {
+    let delegator_list = query_all_delegators(deps).unwrap();
+    for address in delegator_list.into_iter() {
+        let delegation = query_delegation(deps, address).unwrap();
+        if delegation.last_delegate_height - env.block.height > 25920 {
+            if delegation.unbond_flag == true {
+                unbond(deps, env, address)
+            } else {
+                reinvest(deps, env, info, address)
+            };
+        };
+
+    };
+
+    Ok(HandleResponse {
+        messages: vec![],
+        attributes: vec![],
+        data: None,
+    })
 
 }
 
