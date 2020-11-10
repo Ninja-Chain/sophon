@@ -10,7 +10,7 @@ use crate::msg::{
     QueryMsg, TokenInfoResponse,
 };
 use crate::state::{
-    balances, balances_read, claims_read, delegations, delegations_read, delegators
+    balances, balances_read, claims_read, delegations, delegations_read, delegators,
     delegators_read, invest_info, invest_info_read, token_info, token_info_read, total_supply,
     total_supply_read, InvestmentInfo, Supply,
 };
