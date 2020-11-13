@@ -141,55 +141,49 @@ pub fn bond<S: Storage, A: Api, Q: Querier>(
     env: Env,
     info: MessageInfo,
 ) -> StdResult<HandleResponse> {
-    let sender_raw = deps.api.canonical_address(&info.sender)?;
+    let delegator_raw = deps.api.canonical_address(&info.sender)?;
+    let best_validator = select_validator(deps)?;
 
-    // ensure we have the proper denom
     let invest = invest_info_read(&deps.storage).load()?;
-    // payment finds the proper coin (or throws an error)
-    let payment = info
+    let info_clone = info.clone();
+    let payment = info_clone
         .sent_funds
         .iter()
         .find(|x| x.denom == invest.bond_denom)
         .ok_or_else(|| StdError::generic_err(format!("No {} tokens sent", &invest.bond_denom)))?;
 
-    // bonded is the total number of tokens we have delegated from this address
-    let bonded = get_bonded(&deps.querier, &env.contract.address)?;
+    delegations(&mut deps.storage).update(
+        delegator_raw.as_slice(),
+        |delegate_info| -> StdResult<_> {
+            let mut new_delegate_info = delegate_info.unwrap();
+            new_delegate_info.undelegate_reward = Uint128::zero();
+            new_delegate_info.amount = payment.clone().amount;
+            new_delegate_info.validator = best_validator.address.clone();
+            new_delegate_info.last_delegate_height = env.clone().block.height;
+            Ok(new_delegate_info)
+        },
+    )?;
 
-    // calculate to_mint and update total supply
-    let mut totals = total_supply(&mut deps.storage);
-    let mut supply = totals.load()?;
-    // TODO: this is just temporary check - we should use dynamic query or have a way to recover
-    assert_bonds(&supply, bonded)?;
-    let to_mint = if supply.issued.is_zero() || bonded.is_zero() {
-        FALLBACK_RATIO * payment.amount
-    } else {
-        payment.amount.multiply_ratio(supply.issued, bonded)
-    };
-    supply.bonded = bonded + payment.amount;
-    supply.issued += to_mint;
-    totals.save(&supply)?;
+    is_expired(deps, env, info.clone());
 
-    // update the balance of the sender
-    balances(&mut deps.storage).update(&sender_raw, |balance| -> StdResult<_> {
-        Ok(balance.unwrap_or_default() + to_mint)
-    })?;
+    let attributes = vec![
+        attr("action", "bond"),
+        attr("from", info.sender),
+        attr("validator", best_validator.address.clone()),
+        attr("bonded", payment.clone().amount),
+    ];
 
-    // bond them to the validator
-    let res = HandleResponse {
+    let r = HandleResponse {
         messages: vec![StakingMsg::Delegate {
-            validator: invest.validator,
+            validator: best_validator.address.clone(),
             amount: payment.clone(),
         }
         .into()],
-        attributes: vec![
-            attr("action", "bond"),
-            attr("from", info.sender),
-            attr("bonded", payment.amount),
-            attr("minted", to_mint),
-        ],
+        attributes,
         data: None,
     };
-    Ok(res)
+
+    Ok(r)
 }
 
 pub fn reserve_unbond<S: Storage, A: Api, Q: Querier>(
