@@ -195,10 +195,9 @@ pub fn bond<S: Storage, A: Api, Q: Querier>(
 fn claim<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    info: MessageInfo,
+    delegator: HumanAddr
 ) -> Result<HandleResponse, StakingError> {
-    let address = info.sender.clone();
-    let validator_addr = query_delegation(deps, address).unwrap().validator;
+    let validator_addr = query_delegation(deps, delegator).unwrap().validator;
     let all_delegations = query_all_delegations(deps).unwrap();
     let delegations_of_val = all_delegations
         .iter()
@@ -207,11 +206,6 @@ fn claim<S: Storage, A: Api, Q: Querier>(
     let mut total_amount = Uint128::zero();
     for delegation in delegations_of_val.clone() {
         total_amount += delegation.amount
-    }
-
-    // this is just meant as a call-back to ourself
-    if info.sender != env.contract.address {
-        return Err(Unauthorized {}.build());
     }
 
     // find how many tokens we have to bond
@@ -249,7 +243,7 @@ fn reinvest<S: Storage, A: Api, Q: Querier>(
     info: MessageInfo,
     delegator: HumanAddr,
 ) -> StdResult<HandleResponse> {
-    let _ = claim(deps, env.clone(), info);
+    let _ = claim(deps, env.clone(), delegator.clone());
 
     let best_validator = select_validator(deps)?;
 
