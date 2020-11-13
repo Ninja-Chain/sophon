@@ -197,8 +197,8 @@ pub fn reserve_unbond<S: Storage, A: Api, Q: Querier>(
     env: Env,
     info: MessageInfo,
 ) -> StdResult<HandleResponse> {
-    let validator = info.clone().sender;
-    claim(deps, env.clone(), validator);
+    let delegator = info.clone().sender;
+    claim(deps, env.clone(), delegator);
 
     let delegator_raw = deps.api.canonical_address(&info.sender)?;
     delegations(&mut deps.storage).update(
