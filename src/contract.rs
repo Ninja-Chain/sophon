@@ -68,7 +68,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             Ok(transfer(deps, env, info, recipient, amount)?)
         }
         HandleMsg::Bond {} => Ok(bond(deps, env, info)?),
-        // HandleMsg::Unbond {} => Ok(reserve_unbond(deps, env, info)?),
+        HandleMsg::Unbond {} => Ok(reserve_unbond(deps, env, info)?),
         HandleMsg::_BondAllTokens {} => _bond_all_tokens(deps, env, info),
     }
 }
@@ -192,10 +192,31 @@ pub fn bond<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
+pub fn reserve_unbond<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    info: MessageInfo,
+) -> StdResult<HandleResponse> {
+    let delegator = info.clone().sender;
+    claim(deps, env.clone(), delegator);
+
+    let delegator_raw = deps.api.canonical_address(&info.sender)?;
+    delegations(&mut deps.storage).update(
+        delegator_raw.as_slice(),
+        |delegate_info| -> StdResult<_> {
+            let mut new_delegate_info = delegate_info.unwrap();
+            new_delegate_info.unbond_flag = true;
+            Ok(new_delegate_info)
+        },
+    )?;
+
+    return is_expired(deps, env, info);
+}
+
 fn claim<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    delegator: HumanAddr
+    delegator: HumanAddr,
 ) -> Result<HandleResponse, StakingError> {
     let validator_addr = query_delegation(deps, delegator).unwrap().validator;
     let all_delegations = query_all_delegations(deps).unwrap();
@@ -439,7 +460,6 @@ fn is_expired<S: Storage, A: Api, Q: Querier> (
     })
 
 }
-
 
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,

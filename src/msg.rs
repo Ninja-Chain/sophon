@@ -37,7 +37,7 @@ pub enum HandleMsg {
     Bond {},
     /// Unbond will "burn" the given amount of derivative tokens and send the unbonded
     /// staking tokens to the message sender (after exit tax is deducted)
-    // Unbond {},
+    Unbond {},
     /// _BondAllTokens can only be called by the contract itself, after all rewards have been
     /// withdrawn. This is an example of using "callbacks" in message flows.
     /// This can only be invoked by the contract itself as a return from Reinvest
