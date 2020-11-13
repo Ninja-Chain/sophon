@@ -428,16 +428,16 @@ fn is_expired<S: Storage, A: Api, Q: Querier> (
     info: MessageInfo,
 ) -> StdResult<HandleResponse> {
     let delegator_list = query_all_delegators(deps).unwrap();
+    let block_height = env.block.height;
     for address in delegator_list.into_iter() {
-        let delegation = query_delegation(deps, address).unwrap();
-        if delegation.last_delegate_height - env.block.height > 25920 {
+        let delegation = query_delegation(deps, address.clone()).unwrap();
+        if delegation.last_delegate_height - block_height > 25920 {
             if delegation.unbond_flag == true {
-                unbond(deps, env, address)
+                unbond(deps, env.clone(), address);
             } else {
-                reinvest(deps, env, info, address)
+                reinvest(deps, env.clone(), info.clone(), address);
             };
         };
-
     };
 
     Ok(HandleResponse {
